@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Nexus Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #121212;
+            overflow: hidden;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .leaflet-container {
+            background: #121212;
+        }
+
+        .number-icon {
+            background-color: #1A73E8;
+            border: 2px solid white;
+            border-radius: 50%;
+            color: white;
+            font-weight: bold;
+            text-align: center;
+            line-height: 20px;
+            font-size: 12px;
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <script>
+        var map = L.map('map').setView([0, 0], 2);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        var waypointList = []; // Array of {id, lat, lon, marker}
+        var polyline = L.polyline([], { color: '#1A73E8', weight: 3 }).addTo(map);
+
+        map.on('click', function (e) {
+            var lat = e.latlng.lat;
+            var lon = e.latlng.lng;
+            addWaypoint(lat, lon);
+        });
+
+        function createIcon(number) {
+            return L.divIcon({
+                className: 'number-icon',
+                html: number,
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+        }
+
+        function addWaypoint(lat, lon) {
+            var id = Date.now();
+            var marker = L.marker([lat, lon], {
+                icon: createIcon(waypointList.length + 1),
+                draggable: true
+            }).addTo(map);
+
+            var wp = { id: id, lat: lat, lon: lon, marker: marker };
+            waypointList.push(wp);
+
+            marker.on('click', function () {
+                removeWaypoint(id);
+            });
+
+            marker.on('dragend', function (event) {
+                var position = marker.getLatLng();
+                wp.lat = position.lat;
+                wp.lon = position.lng;
+                syncWithPython();
+                updatePolyline();
+            });
+
+            syncWithPython();
+            updatePolyline();
+        }
+
+        function removeWaypoint(id) {
+            var index = waypointList.findIndex(wp => wp.id === id);
+            if (index !== -1) {
+                map.removeLayer(waypointList[index].marker);
+                waypointList.splice(index, 1);
+                reindexMarkers();
+                syncWithPython();
+                updatePolyline();
+            }
+        }
+
+        function reindexMarkers() {
+            waypointList.forEach((wp, i) => {
+                wp.marker.setIcon(createIcon(i + 1));
+            });
+        }
+
+        function updatePolyline() {
+            var latlngs = waypointList.map(wp => [wp.lat, wp.lon]);
+            polyline.setLatLngs(latlngs);
+        }
+
+        function syncWithPython() {
+            // Send the entire ordered list as a JSON string
+            var data = waypointList.map(wp => ({ lat: wp.lat, lon: wp.lon, id: wp.id }));
+            console.log("SYNC:" + JSON.stringify(data));
+        }
+
+        function clearMap() {
+            waypointList.forEach(wp => map.removeLayer(wp.marker));
+            waypointList = [];
+            polyline.setLatLngs([]);
+            syncWithPython();
+        }
+    </script>
+</body>
+
+</html>
